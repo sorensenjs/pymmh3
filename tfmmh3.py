@@ -2,39 +2,20 @@
 pymmh3 was written by Fredrik Kihlander and enhanced by Swapnil Gusani, and is placed in the public
 domain. The authors hereby disclaim copyright to this source code.
 
-pure python implementation of the murmur3 hash algorithm
+pure tensorflow implementation of the murmur3 hash algorithm
 
 https://code.google.com/p/smhasher/wiki/MurmurHash3
-
-This was written for the times when you do not want to compile c-code and install modules,
-and you only want a drop-in murmur3 implementation.
-
-As this is purely python it is FAR from performant and if performance is anything that is needed
-a proper c-module is suggested!
 
 This module is written to have the same format as mmh3 python package found here for simple conversions:
 
 https://pypi.python.org/pypi/mmh3/2.3.1
 '''
 
-import sys as _sys
-if (_sys.version_info > (3, 0)):
-    def xrange( a, b, c ):
-        return range( a, b, c )
-    def xencode(x):
-        if isinstance(x, bytes) or isinstance(x, bytearray):
-            return x
-        else:
-            return x.encode()
-else:
-    def xencode(x):
-        return x
-del _sys
+import tensorflow as tf
 
-def hash( key, seed = 0x0 ):
+def hash( key_str, seed = 0x0 ):
     ''' Implements 32bit murmur3 hash. '''
-
-    key = bytearray( xencode(key) )
+    tf.debugging.assert_type(key_str, tf_type=tf.string)
 
     def fmix( h ):
         h ^= h >> 16
@@ -44,8 +25,9 @@ def hash( key, seed = 0x0 ):
         h ^= h >> 16
         return h
 
-    length = len( key )
+    length = int(tf.strings.length( key_str ).numpy())
     nblocks = int( length / 4 )
+    key = bytearray(tf.io.decode_raw(key_str, tf.uint8).numpy())
 
     h1 = seed
 
@@ -53,7 +35,7 @@ def hash( key, seed = 0x0 ):
     c2 = 0x1b873593
 
     # body
-    for block_start in xrange( 0, nblocks * 4, 4 ):
+    for block_start in range( 0, nblocks * 4, 4 ):
         # ??? big endian?
         k1 = key[ block_start + 3 ] << 24 | \
              key[ block_start + 2 ] << 16 | \
@@ -94,8 +76,9 @@ def hash( key, seed = 0x0 ):
         return -( (unsigned_val ^ 0xFFFFFFFF) + 1 )
 
 
-def hash128( key, seed = 0x0, x64arch = True ):
+def hash128( key_str, seed = 0x0, x64arch = True ):
     ''' Implements 128bit murmur3 hash. '''
+
     def hash128_x64( key, seed ):
         ''' Implements 128bit murmur3 hash for x64. '''
 
@@ -107,8 +90,11 @@ def hash128( key, seed = 0x0, x64arch = True ):
             k ^= k >> 33
             return k
 
-        length = len( key )
+        length = int(tf.strings.length( key_str ).numpy())
         nblocks = int( length / 16 )
+
+        tf.debugging.assert_type(key_str, tf_type=tf.string)
+        key = bytearray(tf.io.decode_raw(key_str, tf.uint8).numpy())
 
         h1 = seed
         h2 = seed
@@ -117,7 +103,7 @@ def hash128( key, seed = 0x0, x64arch = True ):
         c2 = 0x4cf5ad432745937f
 
         #body
-        for block_start in xrange( 0, nblocks * 8, 8 ):
+        for block_start in range( 0, nblocks * 8, 8 ):
             # ??? big endian?
             k1 = key[ 2 * block_start + 7 ] << 56 | \
                  key[ 2 * block_start + 6 ] << 48 | \
@@ -220,7 +206,7 @@ def hash128( key, seed = 0x0, x64arch = True ):
 
         return ( h2 << 64 | h1 )
 
-    def hash128_x86( key, seed ):
+    def hash128_x86( key_str, seed ):
         ''' Implements 128bit murmur3 hash for x86. '''
 
         def fmix( h ):
@@ -231,8 +217,10 @@ def hash128( key, seed = 0x0, x64arch = True ):
             h ^= h >> 16
             return h
 
-        length = len( key )
+        length = int(tf.strings.length( key_str ).numpy())
         nblocks = int( length / 16 )
+        tf.debugging.assert_type(key_str, tf_type=tf.string)
+        key = bytearray(tf.io.decode_raw(key_str, tf.uint8).numpy())
 
         h1 = seed
         h2 = seed
@@ -245,7 +233,7 @@ def hash128( key, seed = 0x0, x64arch = True ):
         c4 = 0xa1e38b93
 
         #body
-        for block_start in xrange( 0, nblocks * 16, 16 ):
+        for block_start in range( 0, nblocks * 16, 16 ):
             k1 = key[ block_start +  3 ] << 24 | \
                  key[ block_start +  2 ] << 16 | \
                  key[ block_start +  1 ] <<  8 | \
@@ -395,18 +383,17 @@ def hash128( key, seed = 0x0, x64arch = True ):
 
         return ( h4 << 96 | h3 << 64 | h2 << 32 | h1 )
 
-    key = bytearray( xencode(key) )
-
     if x64arch:
-        return hash128_x64( key, seed )
+        return hash128_x64( key_str, seed )
     else:
-        return hash128_x86( key, seed )
+        return hash128_x86( key_str, seed )
 
 
-def hash64( key, seed = 0x0, x64arch = True ):
+def hash64( key_str, seed = 0x0, x64arch = True ):
     ''' Implements 64bit murmur3 hash. Returns a tuple. '''
+    tf.debugging.assert_type(key_str, tf_type=tf.string)
 
-    hash_128 = hash128( key, seed, x64arch )
+    hash_128 = hash128( key_str, seed, x64arch )
 
     unsigned_val1 = hash_128 & 0xFFFFFFFFFFFFFFFF
     if unsigned_val1 & 0x8000000000000000 == 0:
@@ -423,14 +410,15 @@ def hash64( key, seed = 0x0, x64arch = True ):
     return ( int( signed_val1 ), int( signed_val2 ) )
 
 
-def hash_bytes( key, seed = 0x0, x64arch = True ):
+def hash_bytes( key_str, seed = 0x0, x64arch = True ):
     ''' Implements 128bit murmur3 hash. Returns a byte string. '''
+    tf.debugging.assert_type(key_str, tf_type=tf.string)
 
-    hash_128 = hash128( key, seed, x64arch )
+    hash_128 = hash128( key_str, seed, x64arch )
 
     bytestring = ''
 
-    for i in xrange(0, 16, 1):
+    for i in range(0, 16, 1):
         lsbyte = hash_128 & 0xFF
         bytestring = bytestring + str( chr( lsbyte ) )
         hash_128 = hash_128 >> 8
@@ -449,4 +437,4 @@ if __name__ == "__main__":
     opts = parser.parse_args()
     
     for str_to_hash in opts.strings:
-        sys.stdout.write( '"%s" = 0x%08X\n' % ( str_to_hash, hash( str_to_hash ) ) )
+        sys.stdout.write( '"%s" = 0x%08X\n' % ( tf.constant(str_to_hash), hash( str_to_hash ) ) )
