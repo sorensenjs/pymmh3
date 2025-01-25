@@ -105,7 +105,7 @@ def hash128( key, seed = 0x0, x64arch = True ):
         tf.debugging.assert_type( key, tf_type=tf.string )
 
         h1 = tf.constant( seed, tf.uint64 )
-        h2 = tf.constant( seed, tf.uint64 )
+        h2 = h1
 
         c1 = tf.constant( 0x87c37b91114253d5, tf.uint64 )
         c2 = tf.constant( 0x4cf5ad432745937f, tf.uint64 )
@@ -246,137 +246,178 @@ def hash128( key, seed = 0x0, x64arch = True ):
             return h
 
         length = int(tf.strings.length( key ).numpy())
-        nblocks = int( length / 16 )
+        nblocks = length // 16
         tf.debugging.assert_type( key, tf_type=tf.string )
 
-        h1 = seed
-        h2 = seed
-        h3 = seed
-        h4 = seed
+        h1 = tf.constant( seed, tf.uint32 )
+        h2 = h1
+        h3 = h1
+        h4 = h1
 
-        c1 = 0x239b961b
-        c2 = 0xab0e9789
-        c3 = 0x38b34ae5
-        c4 = 0xa1e38b93
+        c1 = tf.constant( 0x239b961b, tf.uint32 )
+        c2 = tf.constant( 0xab0e9789, tf.uint32 )
+        c3 = tf.constant( 0x38b34ae5, tf.uint32 )
+        c4 = tf.constant( 0xa1e38b93, tf.uint32 )
 
         #body
         if nblocks:
-            blocks = tf.io.decode_raw(
-                key, tf.int32, little_endian=True, fixed_length=nblocks * 16).numpy()
+            blocks = tf.cast(
+                tf.io.decode_raw(
+                    key, tf.int32, little_endian=True, fixed_length=nblocks * 16),
+                tf.uint32).numpy()
             for block_start in range( 0, nblocks * 16, 16 ):
                 block_index = block_start // 16
 
-                k1 = int(blocks[block_index * 4]) & 0xffffffff
-                k2 = int(blocks[block_index * 4 + 1]) & 0xffffffff
-                k3 = int(blocks[block_index * 4 + 2]) & 0xffffffff
-                k4 = int(blocks[block_index * 4 + 3]) & 0xffffffff
+                k1 = blocks[block_index * 4]
+                k2 = blocks[block_index * 4 + 1]
+                k3 = blocks[block_index * 4 + 2]
+                k4 = blocks[block_index * 4 + 3]
 
-                k1  = ( c1 * k1 ) & 0xFFFFFFFF
-                k1  = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
-                k1  = ( c2 * k1 ) & 0xFFFFFFFF
-                h1 ^= k1
+                k1  = tf.math.multiply( c1, k1 )
+                k1  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( k1, 15 ),
+                      tf.bitwise.right_shift( k1, 17 ))
+                k1 = tf.math.multiply( c2, k1 )
+                h1 = tf.bitwise.bitwise_xor( h1,  k1 )
 
-                h1 = ( h1 << 19 | h1 >> 13 ) & 0xFFFFFFFF # inlined ROTL32
-                h1 = ( h1 + h2 ) & 0xFFFFFFFF
-                h1 = ( h1 * 5 + 0x561ccd1b ) & 0xFFFFFFFF
+                h1  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( h1, 19 ),
+                      tf.bitwise.right_shift( h1, 13 ))
+                h1 = tf.math.add( h1, h2 )
+                h1 = tf.math.add( tf.math.multiply( h1, 5 ), 0x561ccd1b )
 
-                k2  = ( c2 * k2 ) & 0xFFFFFFFF
-                k2  = ( k2 << 16 | k2 >> 16 ) & 0xFFFFFFFF # inlined ROTL32
-                k2  = ( c3 * k2 ) & 0xFFFFFFFF
-                h2 ^= k2
+                k2 = tf.math.multiply( c2, k2 )
+                k2  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( k2, 16 ),
+                      tf.bitwise.right_shift( k2, 16 ))
+                k2 = tf.math.multiply( c3, k2 )
+                h2 = tf.bitwise.bitwise_xor( h2, k2 )
 
-                h2 = ( h2 << 17 | h2 >> 15 ) & 0xFFFFFFFF # inlined ROTL32
-                h2 = ( h2 + h3 ) & 0xFFFFFFFF
-                h2 = ( h2 * 5 + 0x0bcaa747 ) & 0xFFFFFFFF
+                h2  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( h2, 17 ),
+                      tf.bitwise.right_shift( h2, 15 ))
+                h2 = tf.math.add( h2, h3 )
+                h2 = tf.math.add( tf.math.multiply( h2, 5 ), 0x0bcaa747 )
 
-                k3  = ( c3 * k3 ) & 0xFFFFFFFF
-                k3  = ( k3 << 17 | k3 >> 15 ) & 0xFFFFFFFF # inlined ROTL32
-                k3  = ( c4 * k3 ) & 0xFFFFFFFF
-                h3 ^= k3
+                k3  = tf.math.multiply( c3, k3 )
+                k3  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( k3, 17 ),
+                      tf.bitwise.right_shift( k3, 15 ))
+                k3 = tf.math.multiply( c4, k3 )
+                h3 = tf.bitwise.bitwise_xor( h3, k3 )
 
-                h3 = ( h3 << 15 | h3 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
-                h3 = ( h3 + h4 ) & 0xFFFFFFFF
-                h3 = ( h3 * 5 + 0x96cd1c35 ) & 0xFFFFFFFF
+                h3  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( h3, 15 ),
+                      tf.bitwise.right_shift( h3, 17 ))
+                h3 = tf.math.add( h3, h4 )
+                h3 = tf.math.add( tf.math.multiply( h3, 5 ), 0x96cd1c35 )
 
-                k4  = ( c4 * k4 ) & 0xFFFFFFFF
-                k4  = ( k4 << 18 | k4 >> 14 ) & 0xFFFFFFFF # inlined ROTL32
-                k4  = ( c1 * k4 ) & 0xFFFFFFFF
-                h4 ^= k4
+                k4  = tf.math.multiply( c4, k4 )
+                k4  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( k4, 18 ),
+                      tf.bitwise.right_shift( k4, 14 ))
+                k4 = tf.math.multiply( c1, k4 )
+                h4 = tf.bitwise.bitwise_xor( h4, k4 )
 
-                h4 = ( h4 << 13 | h4 >> 19 ) & 0xFFFFFFFF # inlined ROTL32
-                h4 = ( h1 + h4 ) & 0xFFFFFFFF
-                h4 = ( h4 * 5 + 0x32ac3b17 ) & 0xFFFFFFFF
+                h4  = tf.bitwise.bitwise_or(
+                      tf.bitwise.left_shift( h4, 13 ),
+                      tf.bitwise.right_shift( h4, 19 ))
+                h4 = tf.math.add( h1, h4 )
+                h4 = tf.math.add( tf.math.multiply( h4, 5 ),  0x32ac3b17 )
 
         #tail
         tail_index = nblocks * 16
-        k1 = 0
-        k2 = 0
-        k3 = 0
-        k4 = 0
+        k1 = tf.constant( 0, tf.uint32 )
+        k2 = k1
+        k3 = k1
+        k4 = k1
         tail_size = length & 15
         tail_bytes = tf.cast(
             tf.io.decode_raw( tf.strings.substr( key, tail_index, tail_size ),
                               tf.uint8, little_endian=True ).numpy(), tf.uint32 )
 
         if tail_size >= 15:
-            k4 ^= int(tail_bytes[ 14 ]) << 16
+            k4 = tf.bitwise.bitwise_xor(
+                k4, tf.bitwise.left_shift(tail_bytes[ 14 ], 16))
         if tail_size >= 14:
-            k4 ^= int(tail_bytes[ 13 ]) << 8
+            k4 = tf.bitwise.bitwise_xor(
+                k4, tf.bitwise.left_shift(tail_bytes[ 13 ], 8))
         if tail_size >= 13:
-            k4 ^= int(tail_bytes[ 12 ])
+            k4 = tf.bitwise.bitwise_xor( k4, tail_bytes[ 12 ])
 
         if tail_size > 12:
-            k4  = ( k4 * c4 ) & 0xFFFFFFFF
-            k4  = ( k4 << 18 | k4 >> 14 ) & 0xFFFFFFFF # inlined ROTL32
-            k4  = ( k4 * c1 ) & 0xFFFFFFFF
-            h4 ^= k4
+            k4 = tf.math.multiply( k4, c4 )
+            k4 = tf.bitwise.bitwise_or(
+                 tf.bitwise.left_shift( k4, 18 ),
+                 tf.bitwise.right_shift( k4, 14 ) )
+            k4 = tf.math.multiply( k4, c1 )
+            h4 = tf.bitwise.bitwise_xor( h4, k4 )
 
         if tail_size >= 12:
-            k3 ^= int(tail_bytes[ 11 ]) << 24
+            k3 = tf.bitwise.bitwise_xor(
+                k3, tf.bitwise.left_shift(tail_bytes[ 11 ], 24 ) )
         if tail_size >= 11:
-            k3 ^= int(tail_bytes[ 10 ]) << 16
+            k3 = tf.bitwise.bitwise_xor(
+                k3, tf.bitwise.left_shift(tail_bytes[ 10 ], 16 ) )
         if tail_size >= 10:
-            k3 ^= int(tail_bytes[ 9 ]) << 8
+            k3 = tf.bitwise.bitwise_xor(
+                k3, tf.bitwise.left_shift(tail_bytes[ 9 ], 8 ) )
         if tail_size >=  9:
-            k3 ^= int(tail_bytes[  8 ])
+            k3 = tf.bitwise.bitwise_xor( k3, tail_bytes[ 8 ] )
 
         if tail_size > 8:
-            k3  = ( k3 * c3 ) & 0xFFFFFFFF
-            k3  = ( k3 << 17 | k3 >> 15 ) & 0xFFFFFFFF # inlined ROTL32
-            k3  = ( k3 * c4 ) & 0xFFFFFFFF
-            h3 ^= k3
+            k3 = tf.math.multiply( k3, c3 )
+            k3 = tf.bitwise.bitwise_or(
+                 tf.bitwise.left_shift( k3, 17 ),
+                 tf.bitwise.right_shift( k3, 15 ))
+            k3 = tf.math.multiply( k3, c4 )
+            h3 = tf.bitwise.bitwise_xor( h3, k3 )
 
         if tail_size >= 8:
-            k2 ^= int(tail_bytes[ 7 ]) << 24
+            k2 = tf.bitwise.bitwise_xor(
+                k2, tf.bitwise.left_shift(tail_bytes[ 7 ], 24 ) )
         if tail_size >= 7:
-            k2 ^= int(tail_bytes[ 6 ]) << 16
+            k2 = tf.bitwise.bitwise_xor(
+                k2, tf.bitwise.left_shift(tail_bytes[ 6 ], 16 ) )
         if tail_size >= 6:
-            k2 ^= int(tail_bytes[ 5 ]) << 8
+            k2 = tf.bitwise.bitwise_xor(
+                k2, tf.bitwise.left_shift(tail_bytes[ 5 ], 8 ) )
         if tail_size >= 5:
-            k2 ^= int(tail_bytes[ 4 ])
+            k2 = tf.bitwise.bitwise_xor( k2, tail_bytes[ 4 ] )
 
         if tail_size > 4:
-            k2  = ( k2 * c2 ) & 0xFFFFFFFF
-            k2  = ( k2 << 16 | k2 >> 16 ) & 0xFFFFFFFF # inlined ROTL32
-            k2  = ( k2 * c3 ) & 0xFFFFFFFF
-            h2 ^= k2
+            k2 = tf.math.multiply( k2, c2 )
+            k2 = tf.bitwise.bitwise_or(
+                 tf.bitwise.left_shift( k2, 16 ),
+                 tf.bitwise.right_shift( k2, 16 ))
+            k2 = tf.math.multiply( k2, c3 )
+            h2 = tf.bitwise.bitwise_xor( h2, k2 )
 
         if tail_size >= 4:
-            k1 ^= int(tail_bytes[ 3 ]) << 24
+            k1 = tf.bitwise.bitwise_xor(
+                k1, tf.bitwise.left_shift(tail_bytes[ 3 ], 24 ) )
         if tail_size >= 3:
-            k1 ^= int(tail_bytes[ 2 ]) << 16
+            k1 = tf.bitwise.bitwise_xor(
+                k1, tf.bitwise.left_shift(tail_bytes[ 2 ], 16 ) )
         if tail_size >= 2:
-            k1 ^= int(tail_bytes[ 1 ]) << 8
+            k1 = tf.bitwise.bitwise_xor(
+                k1, tf.bitwise.left_shift(tail_bytes[ 1 ], 8 ) )
         if tail_size >= 1:
-            k1 ^= int(tail_bytes[ 0 ])
+            k1 = tf.bitwise.bitwise_xor( k1, tail_bytes[ 0 ] )
 
         if tail_size > 0:
-            k1  = ( k1 * c1 ) & 0xFFFFFFFF
-            k1  = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
-            k1  = ( k1 * c2 ) & 0xFFFFFFFF
-            h1 ^= k1
+            k1 = tf.math.multiply( k1, c1 )
+            k1 = tf.bitwise.bitwise_or(
+                 tf.bitwise.left_shift( k1, 15 ),
+                 tf.bitwise.right_shift( k1, 17 ))
+            k1 = tf.math.multiply( k1, c2 )
+            h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
         #finalization
+        h1 = int( h1.numpy() )
+        h2 = int( h2.numpy() )
+        h3 = int( h3.numpy() )
+        h4 = int( h4.numpy() )
         h1 ^= length
         h2 ^= length
         h3 ^= length
