@@ -13,9 +13,9 @@ https://pypi.python.org/pypi/mmh3/2.3.1
 
 import tensorflow as tf
 
-def hash( key_str, seed = 0x0 ):
+def hash( key, seed = 0x0 ):
     ''' Implements 32bit murmur3 hash. '''
-    tf.debugging.assert_type(key_str, tf_type=tf.string)
+    tf.debugging.assert_type(key, tf_type=tf.string)
 
     def fmix( h ):
         h ^= h >> 16
@@ -25,9 +25,8 @@ def hash( key_str, seed = 0x0 ):
         h ^= h >> 16
         return h
 
-    length = int(tf.strings.length( key_str ).numpy())
+    length = int(tf.strings.length( key ).numpy())
     nblocks = int( length / 4 )
-    key = bytearray(tf.io.decode_raw(key_str, tf.uint8).numpy())
 
     h1 = seed
 
@@ -35,33 +34,35 @@ def hash( key_str, seed = 0x0 ):
     c2 = 0x1b873593
 
     # body
-    for block_start in range( 0, nblocks * 4, 4 ):
-        # ??? big endian?
-        k1 = key[ block_start + 3 ] << 24 | \
-             key[ block_start + 2 ] << 16 | \
-             key[ block_start + 1 ] <<  8 | \
-             key[ block_start + 0 ]
-             
-        k1 = ( c1 * k1 ) & 0xFFFFFFFF
-        k1 = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
-        k1 = ( c2 * k1 ) & 0xFFFFFFFF
-        
-        h1 ^= k1
-        h1  = ( h1 << 13 | h1 >> 19 ) & 0xFFFFFFFF # inlined ROTL32
-        h1  = ( h1 * 5 + 0xe6546b64 ) & 0xFFFFFFFF
+    if nblocks:
+        blocks = tf.io.decode_raw(
+            key, tf.int32, little_endian=True, fixed_length=nblocks * 4).numpy()
+
+        for block in blocks:
+            k1 = int(block) & 0xffffffff
+
+            k1 = ( c1 * k1 ) & 0xFFFFFFFF
+            k1 = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
+            k1 = ( c2 * k1 ) & 0xFFFFFFFF
+
+            h1 ^= k1
+            h1  = ( h1 << 13 | h1 >> 19 ) & 0xFFFFFFFF # inlined ROTL32
+            h1  = ( h1 * 5 + 0xe6546b64 ) & 0xFFFFFFFF
 
     # tail
     tail_index = nblocks * 4
     k1 = 0
     tail_size = length & 3
-
+    tail_bytes = tf.cast(
+        tf.io.decode_raw(tf.strings.substr(key, tail_index, tail_size),
+                         tf.uint8, little_endian=True).numpy(), tf.uint32)
     if tail_size >= 3:
-        k1 ^= key[ tail_index + 2 ] << 16
+        k1 ^= int(tail_bytes[ 2 ]) << 16
     if tail_size >= 2:
-        k1 ^= key[ tail_index + 1 ] << 8
+        k1 ^= int(tail_bytes[ 1 ]) << 8
     if tail_size >= 1:
-        k1 ^= key[ tail_index + 0 ]
-    
+        k1 ^= int(tail_bytes[0])
+
     if tail_size > 0:
         k1  = ( k1 * c1 ) & 0xFFFFFFFF
         k1  = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
@@ -103,43 +104,31 @@ def hash128( key_str, seed = 0x0, x64arch = True ):
         c2 = 0x4cf5ad432745937f
 
         #body
-        for block_start in range( 0, nblocks * 8, 8 ):
-            # ??? big endian?
-            k1 = key[ 2 * block_start + 7 ] << 56 | \
-                 key[ 2 * block_start + 6 ] << 48 | \
-                 key[ 2 * block_start + 5 ] << 40 | \
-                 key[ 2 * block_start + 4 ] << 32 | \
-                 key[ 2 * block_start + 3 ] << 24 | \
-                 key[ 2 * block_start + 2 ] << 16 | \
-                 key[ 2 * block_start + 1 ] <<  8 | \
-                 key[ 2 * block_start + 0 ]
+        if nblocks:
+            blocks = tf.io.decode_raw(
+                key_str, tf.int64, little_endian=True, fixed_length=nblocks * 16).numpy()
+            for block_start in range( 0, nblocks * 2, 2 ):
 
-            k2 = key[ 2 * block_start + 15 ] << 56 | \
-                 key[ 2 * block_start + 14 ] << 48 | \
-                 key[ 2 * block_start + 13 ] << 40 | \
-                 key[ 2 * block_start + 12 ] << 32 | \
-                 key[ 2 * block_start + 11 ] << 24 | \
-                 key[ 2 * block_start + 10 ] << 16 | \
-                 key[ 2 * block_start + 9 ] <<  8 | \
-                 key[ 2 * block_start + 8 ]
+                k1 = int(blocks[block_start]) & 0xffffffffffffffff
+                k2 = int(blocks[1 + block_start]) & 0xffffffffffffffff
 
-            k1  = ( c1 * k1 ) & 0xFFFFFFFFFFFFFFFF
-            k1  = ( k1 << 31 | k1 >> 33 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
-            k1  = ( c2 * k1 ) & 0xFFFFFFFFFFFFFFFF
-            h1 ^= k1
+                k1  = ( c1 * k1 ) & 0xFFFFFFFFFFFFFFFF
+                k1  = ( k1 << 31 | k1 >> 33 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
+                k1  = ( c2 * k1 ) & 0xFFFFFFFFFFFFFFFF
+                h1 ^= k1
 
-            h1 = ( h1 << 27 | h1 >> 37 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
-            h1 = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
-            h1 = ( h1 * 5 + 0x52dce729 ) & 0xFFFFFFFFFFFFFFFF
+                h1 = ( h1 << 27 | h1 >> 37 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
+                h1 = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
+                h1 = ( h1 * 5 + 0x52dce729 ) & 0xFFFFFFFFFFFFFFFF
 
-            k2  = ( c2 * k2 ) & 0xFFFFFFFFFFFFFFFF
-            k2  = ( k2 << 33 | k2 >> 31 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
-            k2  = ( c1 * k2 ) & 0xFFFFFFFFFFFFFFFF
-            h2 ^= k2
+                k2  = ( c2 * k2 ) & 0xFFFFFFFFFFFFFFFF
+                k2  = ( k2 << 33 | k2 >> 31 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
+                k2  = ( c1 * k2 ) & 0xFFFFFFFFFFFFFFFF
+                h2 ^= k2
 
-            h2 = ( h2 << 31 | h2 >> 33 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
-            h2 = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
-            h2 = ( h2 * 5 + 0x38495ab5 ) & 0xFFFFFFFFFFFFFFFF
+                h2 = ( h2 << 31 | h2 >> 33 ) & 0xFFFFFFFFFFFFFFFF # inlined ROTL64
+                h2 = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
+                h2 = ( h2 * 5 + 0x38495ab5 ) & 0xFFFFFFFFFFFFFFFF
 
         #tail
         tail_index = nblocks * 16
@@ -233,62 +222,63 @@ def hash128( key_str, seed = 0x0, x64arch = True ):
         c4 = 0xa1e38b93
 
         #body
-        for block_start in range( 0, nblocks * 16, 16 ):
-            k1 = key[ block_start +  3 ] << 24 | \
-                 key[ block_start +  2 ] << 16 | \
-                 key[ block_start +  1 ] <<  8 | \
-                 key[ block_start +  0 ]
+        if nblocks:
+            for block_start in range( 0, nblocks * 16, 16 ):
+                k1 = key[ block_start +  3 ] << 24 | \
+                     key[ block_start +  2 ] << 16 | \
+                     key[ block_start +  1 ] <<  8 | \
+                     key[ block_start +  0 ]
 
-            k2 = key[ block_start +  7 ] << 24 | \
-                 key[ block_start +  6 ] << 16 | \
-                 key[ block_start +  5 ] <<  8 | \
-                 key[ block_start +  4 ]
+                k2 = key[ block_start +  7 ] << 24 | \
+                     key[ block_start +  6 ] << 16 | \
+                     key[ block_start +  5 ] <<  8 | \
+                     key[ block_start +  4 ]
 
-            k3 = key[ block_start + 11 ] << 24 | \
-                 key[ block_start + 10 ] << 16 | \
-                 key[ block_start +  9 ] <<  8 | \
-                 key[ block_start +  8 ]
+                k3 = key[ block_start + 11 ] << 24 | \
+                     key[ block_start + 10 ] << 16 | \
+                     key[ block_start +  9 ] <<  8 | \
+                     key[ block_start +  8 ]
 
-            k4 = key[ block_start + 15 ] << 24 | \
-                 key[ block_start + 14 ] << 16 | \
-                 key[ block_start + 13 ] <<  8 | \
-                 key[ block_start + 12 ]
+                k4 = key[ block_start + 15 ] << 24 | \
+                     key[ block_start + 14 ] << 16 | \
+                     key[ block_start + 13 ] <<  8 | \
+                     key[ block_start + 12 ]
 
-            k1  = ( c1 * k1 ) & 0xFFFFFFFF
-            k1  = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
-            k1  = ( c2 * k1 ) & 0xFFFFFFFF
-            h1 ^= k1
+                k1  = ( c1 * k1 ) & 0xFFFFFFFF
+                k1  = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
+                k1  = ( c2 * k1 ) & 0xFFFFFFFF
+                h1 ^= k1
 
-            h1 = ( h1 << 19 | h1 >> 13 ) & 0xFFFFFFFF # inlined ROTL32
-            h1 = ( h1 + h2 ) & 0xFFFFFFFF
-            h1 = ( h1 * 5 + 0x561ccd1b ) & 0xFFFFFFFF
+                h1 = ( h1 << 19 | h1 >> 13 ) & 0xFFFFFFFF # inlined ROTL32
+                h1 = ( h1 + h2 ) & 0xFFFFFFFF
+                h1 = ( h1 * 5 + 0x561ccd1b ) & 0xFFFFFFFF
 
-            k2  = ( c2 * k2 ) & 0xFFFFFFFF
-            k2  = ( k2 << 16 | k2 >> 16 ) & 0xFFFFFFFF # inlined ROTL32
-            k2  = ( c3 * k2 ) & 0xFFFFFFFF
-            h2 ^= k2
+                k2  = ( c2 * k2 ) & 0xFFFFFFFF
+                k2  = ( k2 << 16 | k2 >> 16 ) & 0xFFFFFFFF # inlined ROTL32
+                k2  = ( c3 * k2 ) & 0xFFFFFFFF
+                h2 ^= k2
 
-            h2 = ( h2 << 17 | h2 >> 15 ) & 0xFFFFFFFF # inlined ROTL32
-            h2 = ( h2 + h3 ) & 0xFFFFFFFF
-            h2 = ( h2 * 5 + 0x0bcaa747 ) & 0xFFFFFFFF
+                h2 = ( h2 << 17 | h2 >> 15 ) & 0xFFFFFFFF # inlined ROTL32
+                h2 = ( h2 + h3 ) & 0xFFFFFFFF
+                h2 = ( h2 * 5 + 0x0bcaa747 ) & 0xFFFFFFFF
 
-            k3  = ( c3 * k3 ) & 0xFFFFFFFF
-            k3  = ( k3 << 17 | k3 >> 15 ) & 0xFFFFFFFF # inlined ROTL32
-            k3  = ( c4 * k3 ) & 0xFFFFFFFF
-            h3 ^= k3
+                k3  = ( c3 * k3 ) & 0xFFFFFFFF
+                k3  = ( k3 << 17 | k3 >> 15 ) & 0xFFFFFFFF # inlined ROTL32
+                k3  = ( c4 * k3 ) & 0xFFFFFFFF
+                h3 ^= k3
 
-            h3 = ( h3 << 15 | h3 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
-            h3 = ( h3 + h4 ) & 0xFFFFFFFF
-            h3 = ( h3 * 5 + 0x96cd1c35 ) & 0xFFFFFFFF
+                h3 = ( h3 << 15 | h3 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
+                h3 = ( h3 + h4 ) & 0xFFFFFFFF
+                h3 = ( h3 * 5 + 0x96cd1c35 ) & 0xFFFFFFFF
 
-            k4  = ( c4 * k4 ) & 0xFFFFFFFF
-            k4  = ( k4 << 18 | k4 >> 14 ) & 0xFFFFFFFF # inlined ROTL32
-            k4  = ( c1 * k4 ) & 0xFFFFFFFF
-            h4 ^= k4
+                k4  = ( c4 * k4 ) & 0xFFFFFFFF
+                k4  = ( k4 << 18 | k4 >> 14 ) & 0xFFFFFFFF # inlined ROTL32
+                k4  = ( c1 * k4 ) & 0xFFFFFFFF
+                h4 ^= k4
 
-            h4 = ( h4 << 13 | h4 >> 19 ) & 0xFFFFFFFF # inlined ROTL32
-            h4 = ( h1 + h4 ) & 0xFFFFFFFF
-            h4 = ( h4 * 5 + 0x32ac3b17 ) & 0xFFFFFFFF
+                h4 = ( h4 << 13 | h4 >> 19 ) & 0xFFFFFFFF # inlined ROTL32
+                h4 = ( h1 + h4 ) & 0xFFFFFFFF
+                h4 = ( h4 * 5 + 0x32ac3b17 ) & 0xFFFFFFFF
 
         #tail
         tail_index = nblocks * 16
