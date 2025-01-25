@@ -18,11 +18,11 @@ def hash( key, seed = 0x0 ):
     tf.debugging.assert_type( key, tf_type=tf.string )
 
     def fmix( h ):
-        h ^= h >> 16
-        h  = ( h * 0x85ebca6b ) & 0xFFFFFFFF
-        h ^= h >> 13
-        h  = ( h * 0xc2b2ae35 ) & 0xFFFFFFFF
-        h ^= h >> 16
+        h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
+        h = tf.math.multiply( h, 0x85ebca6b )
+        h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 13))
+        h = tf.math.multiply( h, 0xc2b2ae35 )
+        h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
         return h
 
     length = int(tf.strings.length( key ).numpy())
@@ -77,8 +77,7 @@ def hash( key, seed = 0x0 ):
         h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
     #finalization
-    h1 = int( h1.numpy() )
-    unsigned_val = fmix( h1 ^ length )
+    unsigned_val = int(fmix( tf.bitwise.bitwise_xor( h1, length ) ).numpy())
     if unsigned_val & 0x80000000 == 0:
         return unsigned_val
     else:
@@ -92,11 +91,11 @@ def hash128( key, seed = 0x0, x64arch = True ):
         ''' Implements 128bit murmur3 hash for x64. '''
 
         def fmix( k ):
-            k ^= k >> 33
-            k  = ( k * 0xff51afd7ed558ccd ) & 0xFFFFFFFFFFFFFFFF
-            k ^= k >> 33
-            k  = ( k * 0xc4ceb9fe1a85ec53 ) & 0xFFFFFFFFFFFFFFFF
-            k ^= k >> 33
+            k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
+            k = tf.multiply( k, 0xff51afd7ed558ccd )
+            k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
+            k = tf.multiply( k, 0xc4ceb9fe1a85ec53 )
+            k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
             return k
 
         length = int(tf.strings.length( key).numpy())
@@ -218,21 +217,19 @@ def hash128( key, seed = 0x0, x64arch = True ):
             h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
         #finalization
-        h1 = int(h1.numpy())
-        h2 = int(h2.numpy())
-        h1 ^= length
-        h2 ^= length
+        h1 = tf.bitwise.bitwise_xor( h1, length )
+        h2 = tf.bitwise.bitwise_xor( h2, length )
 
-        h1  = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
-        h2  = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
+        h1  = tf.math.add( h1, h2 )
+        h2  = tf.math.add( h1, h2 )
 
         h1  = fmix( h1 )
         h2  = fmix( h2 )
 
-        h1  = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
-        h2  = ( h1 + h2 ) & 0xFFFFFFFFFFFFFFFF
+        h1  = tf.math.add( h1, h2 )
+        h2  = tf.math.add( h1, h2 )
 
-        return ( h2 << 64 | h1 )
+        return ( int(h2.numpy()) << 64 | int(h1.numpy()) )
 
     def hash128_x86( key, seed ):
         ''' Implements 128bit murmur3 hash for x86. '''
