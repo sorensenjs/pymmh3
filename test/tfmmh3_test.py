@@ -40,7 +40,7 @@ class Testtfmmh3( unittest.TestCase ):
         with open( os.path.join( file_dir, 'pg1260.txt' ), 'rb' ) as test_file:
             for l in test_file.readlines():
                 s = solution[l]
-                r = tfmmh3.hash( tf.constant(l), seed = 0x1234ABCD )
+                r = tfmmh3.hash( tf.constant(l), seed = tf.constant( 0x1234ABCD, tf.uint32 ) )
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
     def test_128bit_x86_basic_string( self ):
@@ -58,7 +58,8 @@ class Testtfmmh3( unittest.TestCase ):
         with open( os.path.join( file_dir, 'pg1260.txt' ), 'rb' ) as test_file:
             for l in test_file.readlines():
                 s = solution[l]
-                r = tfmmh3.hash128( tf.constant(l), seed = 0x1234ABCD, x64arch = False )
+                r = tfmmh3.hash128( tf.constant(l), seed = tf.constant( 0x1234ABCD, tf.uint32 ),
+                                    x64arch = False )
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
     def test_128bit_x64_basic_string( self ):
@@ -76,7 +77,8 @@ class Testtfmmh3( unittest.TestCase ):
         with open( os.path.join( file_dir, 'pg1260.txt' ), 'rb' ) as test_file:
             for l in test_file.readlines():
                 s = solution[l]
-                r = tfmmh3.hash128( tf.constant(l), seed = 0x1234ABCD, x64arch = True )
+                r = tfmmh3.hash128( tf.constant(l), seed = tf.constant( 0x1234ABCD, tf.uint32 ),
+                                    x64arch = True )
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
 if __name__ == "__main__":

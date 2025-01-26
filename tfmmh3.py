@@ -13,11 +13,13 @@ https://pypi.python.org/pypi/mmh3/2.3.1
 
 import tensorflow as tf
 
-def hash( key, seed = 0x0 ):
+def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
     ''' Implements 32bit murmur3 hash. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
 
+    @tf.function
     def fmix( h ):
+        tf.debugging.assert_type( h, tf_type=tf.uint32 )
         h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
         h = tf.math.multiply( h, 0x85ebca6b )
         h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 13))
@@ -28,10 +30,10 @@ def hash( key, seed = 0x0 ):
     length = int(tf.strings.length( key ).numpy())
     nblocks = length // 4
 
-    h1 = tf.constant( seed, tf.uint32 )
+    h1 = seed
 
-    c1 = tf.constant(0xcc9e2d51, tf.uint32)
-    c2 = tf.constant(0x1b873593, tf.uint32)
+    c1 = tf.constant( 0xcc9e2d51, tf.uint32 )
+    c2 = tf.constant( 0x1b873593, tf.uint32 )
 
     # body
     if nblocks:
@@ -59,7 +61,7 @@ def hash( key, seed = 0x0 ):
     tail_size = length & 3
     tail_bytes = tf.cast(
         tf.io.decode_raw(tf.strings.substr( key, tail_index, tail_size ),
-                         tf.uint8, little_endian=True).numpy(), tf.uint32)
+                         tf.uint8, little_endian=True).numpy(), tf.uint32 )
     if tail_size >= 3:
         k1 = tf.bitwise.bitwise_xor(
             k1, tf.bitwise.left_shift( tail_bytes[ 2 ], 16 ) )
@@ -84,13 +86,15 @@ def hash( key, seed = 0x0 ):
         return -( (unsigned_val ^ 0xFFFFFFFF) + 1 )
 
 
-def hash128( key, seed = 0x0, x64arch = True ):
+def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     ''' Implements 128bit murmur3 hash. '''
 
     def hash128_x64( key, seed ):
         ''' Implements 128bit murmur3 hash for x64. '''
 
+        @tf.function
         def fmix( k ):
+            tf.debugging.assert_type( k, tf_type=tf.uint64 )
             k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
             k = tf.multiply( k, 0xff51afd7ed558ccd )
             k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
@@ -103,7 +107,7 @@ def hash128( key, seed = 0x0, x64arch = True ):
 
         tf.debugging.assert_type( key, tf_type=tf.string )
 
-        h1 = tf.constant( seed, tf.uint64 )
+        h1 = tf.cast( seed, tf.uint64 )
         h2 = h1
 
         c1 = tf.constant( 0x87c37b91114253d5, tf.uint64 )
@@ -234,22 +238,24 @@ def hash128( key, seed = 0x0, x64arch = True ):
     def hash128_x86( key, seed ):
         ''' Implements 128bit murmur3 hash for x86. '''
 
+        @tf.function
         def fmix( h ):
-            h ^= h >> 16
-            h  = ( h * 0x85ebca6b ) & 0xFFFFFFFF
-            h ^= h >> 13
-            h  = ( h * 0xc2b2ae35 ) & 0xFFFFFFFF
-            h ^= h >> 16
+            tf.debugging.assert_type( h, tf_type=tf.uint32 )
+            h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
+            h = tf.math.multiply( h, 0x85ebca6b )
+            h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 13))
+            h = tf.math.multiply( h, 0xc2b2ae35 )
+            h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
             return h
 
         length = int(tf.strings.length( key ).numpy())
         nblocks = length // 16
         tf.debugging.assert_type( key, tf_type=tf.string )
 
-        h1 = tf.constant( seed, tf.uint32 )
-        h2 = h1
-        h3 = h1
-        h4 = h1
+        h1 = seed
+        h2 = seed
+        h3 = seed
+        h4 = seed
 
         c1 = tf.constant( 0x239b961b, tf.uint32 )
         c2 = tf.constant( 0xab0e9789, tf.uint32 )
@@ -411,35 +417,34 @@ def hash128( key, seed = 0x0, x64arch = True ):
             h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
         #finalization
-        h1 = int( h1.numpy() )
-        h2 = int( h2.numpy() )
-        h3 = int( h3.numpy() )
-        h4 = int( h4.numpy() )
-        h1 ^= length
-        h2 ^= length
-        h3 ^= length
-        h4 ^= length
+        h1 = tf.bitwise.bitwise_xor( h1, length )
+        h2 = tf.bitwise.bitwise_xor( h2, length )
+        h3 = tf.bitwise.bitwise_xor( h3, length )
+        h4 = tf.bitwise.bitwise_xor( h4, length )
 
-        h1 = ( h1 + h2 ) & 0xFFFFFFFF
-        h1 = ( h1 + h3 ) & 0xFFFFFFFF
-        h1 = ( h1 + h4 ) & 0xFFFFFFFF
-        h2 = ( h1 + h2 ) & 0xFFFFFFFF
-        h3 = ( h1 + h3 ) & 0xFFFFFFFF
-        h4 = ( h1 + h4 ) & 0xFFFFFFFF
+        h1 = tf.math.add( h1, h2 )
+        h1 = tf.math.add( h1, h3 )
+        h1 = tf.math.add( h1, h4 )
+        h2 = tf.math.add( h1, h2 )
+        h3 = tf.math.add( h1, h3 )
+        h4 = tf.math.add( h1, h4 )
 
         h1 = fmix( h1 )
         h2 = fmix( h2 )
         h3 = fmix( h3 )
         h4 = fmix( h4 )
 
-        h1 = ( h1 + h2 ) & 0xFFFFFFFF
-        h1 = ( h1 + h3 ) & 0xFFFFFFFF
-        h1 = ( h1 + h4 ) & 0xFFFFFFFF
-        h2 = ( h1 + h2 ) & 0xFFFFFFFF
-        h3 = ( h1 + h3 ) & 0xFFFFFFFF
-        h4 = ( h1 + h4 ) & 0xFFFFFFFF
+        h1 = tf.math.add( h1, h2 )
+        h1 = tf.math.add( h1, h3 )
+        h1 = tf.math.add( h1, h4 )
+        h2 = tf.math.add( h1, h2 )
+        h3 = tf.math.add( h1, h3 )
+        h4 = tf.math.add( h1, h4 )
 
-        return ( h4 << 96 | h3 << 64 | h2 << 32 | h1 )
+        return ( int( h4.numpy() ) << 96 |
+                 int( h3.numpy() ) << 64 |
+                 int( h2.numpy() ) << 32 |
+                 int( h1.numpy() ) )
 
     if x64arch:
         return hash128_x64( key, seed )
@@ -447,7 +452,7 @@ def hash128( key, seed = 0x0, x64arch = True ):
         return hash128_x86( key, seed )
 
 
-def hash64( key, seed = 0x0, x64arch = True ):
+def hash64( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     ''' Implements 64bit murmur3 hash. Returns a tuple. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
 
@@ -468,7 +473,7 @@ def hash64( key, seed = 0x0, x64arch = True ):
     return ( int( signed_val1 ), int( signed_val2 ) )
 
 
-def hash_bytes( key, seed = 0x0, x64arch = True ):
+def hash_bytes( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     ''' Implements 128bit murmur3 hash. Returns a byte string. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
 
