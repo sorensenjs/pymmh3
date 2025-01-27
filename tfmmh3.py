@@ -24,19 +24,31 @@ def _rotate_left( x, n ):
     )
 
 
+@tf.function
+def _fmix32( h ):
+    tf.debugging.assert_type( h, tf_type=tf.uint32 )
+    h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
+    h = tf.math.multiply( h, 0x85ebca6b )
+    h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 13))
+    h = tf.math.multiply( h, 0xc2b2ae35 )
+    h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
+    return h
+
+
+@tf.function
+def _fmix64( k ):
+    tf.debugging.assert_type( k, tf_type=tf.uint64 )
+    k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
+    k = tf.multiply( k, 0xff51afd7ed558ccd )
+    k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
+    k = tf.multiply( k, 0xc4ceb9fe1a85ec53 )
+    k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
+    return k
+
+
 def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
     ''' Implements 32bit murmur3 hash. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
-
-    @tf.function
-    def fmix( h ):
-        tf.debugging.assert_type( h, tf_type=tf.uint32 )
-        h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
-        h = tf.math.multiply( h, 0x85ebca6b )
-        h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 13))
-        h = tf.math.multiply( h, 0xc2b2ae35 )
-        h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
-        return h
 
     length = tf.strings.length( key )
     nblocks = tf.bitwise.right_shift( length, 2 )
@@ -58,13 +70,11 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
             k1 = tf.constant( block, tf.uint32 )
 
             k1 = tf.math.multiply( c1, k1 )
-            k1 = tf.bitwise.bitwise_or( tf.bitwise.left_shift( k1, 15 ),
-                                        tf.bitwise.right_shift( k1, 17 ))
+            k1 = _rotate_left( k1, 15 )
             k1 = tf.math.multiply( c2, k1 )
 
             h1 = tf.bitwise.bitwise_xor( h1, k1 )
-            h1 = tf.bitwise.bitwise_or( tf.bitwise.left_shift( h1, 13 ),
-                                        tf.bitwise.right_shift( h1, 19 ))
+            h1 = _rotate_left( h1, 13 )
             h1  = tf.math.add( tf.math.multiply( h1, 5 ), 0xe6546b64 )
 
     # tail
@@ -85,13 +95,12 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
 
     if tail_size > 0:
         k1  = tf.math.multiply( k1, c1 )
-        k1 = tf.bitwise.bitwise_or( tf.bitwise.left_shift( k1, 15 ),
-                                    tf.bitwise.right_shift( k1, 17 ))
+        k1 = _rotate_left( k1, 15 )
         k1  = tf.math.multiply( k1, c2 )
         h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
     #finalization
-    unsigned_val = int(fmix( tf.bitwise.bitwise_xor(
+    unsigned_val = int(_fmix32( tf.bitwise.bitwise_xor(
         h1, tf.cast( length, tf.uint32 ) ) ).numpy())
     if unsigned_val & 0x80000000 == 0:
         return unsigned_val
@@ -105,16 +114,6 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     def hash128_x64( key, seed ):
         ''' Implements 128bit murmur3 hash for x64. '''
         tf.debugging.assert_type( key, tf_type=tf.string )
-
-        @tf.function
-        def fmix( k ):
-            tf.debugging.assert_type( k, tf_type=tf.uint64 )
-            k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
-            k = tf.multiply( k, 0xff51afd7ed558ccd )
-            k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
-            k = tf.multiply( k, 0xc4ceb9fe1a85ec53 )
-            k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
-            return k
 
         length = tf.strings.length( key )
         nblocks = tf.bitwise.right_shift( length, 4 )
@@ -135,30 +134,21 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
                 k1 = blocks[ block_start ]
                 k2 = blocks[ 1 + block_start ]
 
-                k1  = tf.math.multiply( c1, k1 )
-                k1  = tf.bitwise.bitwise_or(
-                    tf.bitwise.left_shift( k1, 31 ),
-                    tf.bitwise.right_shift( k1, 33 ))
+                k1 = tf.math.multiply( c1, k1 )
+                k1 = _rotate_left( k1, 31 )
                 k1 = tf.math.multiply( c2, k1 )
                 h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
-                h1  = tf.bitwise.bitwise_or(
-                    tf.bitwise.left_shift( h1, 27 ),
-                    tf.bitwise.right_shift( h1, 37 ))
+                h1 = _rotate_left( h1, 27 )
                 h1 = tf.math.add( h1, h2 )
                 h1 = tf.math.add( tf.math.multiply( h1, 5 ), 0x52dce729 )
 
                 k2 = tf.math.multiply( c2, k2 )
-                k2  = tf.bitwise.bitwise_or(
-                    tf.bitwise.left_shift( k2, 33 ),
-                    tf.bitwise.right_shift( k2, 31 ))
+                k2 = _rotate_left( k2, 33 )
                 k2 = tf.math.multiply( c1, k2 )
                 h2 = tf.bitwise.bitwise_xor( h2, k2 )
 
-
-                h2  = tf.bitwise.bitwise_or(
-                    tf.bitwise.left_shift( h2, 31 ),
-                    tf.bitwise.right_shift( h2, 33 ))
+                h2 = _rotate_left( h2, 31 )
                 h2 = tf.math.add( h1, h2 )
                 h2 = tf.math.add( tf.math.multiply( h2, 5 ), 0x38495ab5 )
 
@@ -194,9 +184,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
         if tail_size > 8:
             k2 = tf.math.multiply( k2, c2 )
-            k2  = tf.bitwise.bitwise_or(
-                    tf.bitwise.left_shift( k2, 33 ),
-                    tf.bitwise.right_shift( k2, 31 ))
+            k2 = _rotate_left( k2, 33 )
             k2 = tf.math.multiply( k2, c1 )
             h2 = tf.bitwise.bitwise_xor( h2, k2 )
 
@@ -226,9 +214,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
         if tail_size > 0:
             k1 = tf.math.multiply( k1, c1 )
-            k1  = tf.bitwise.bitwise_or(
-                    tf.bitwise.left_shift( k1, 31 ),
-                    tf.bitwise.right_shift( k1, 33 ))
+            k1 = _rotate_left( k1, 31 )
             k1 = tf.math.multiply( k1, c2 )
             h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
@@ -239,8 +225,8 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
         h1  = tf.math.add( h1, h2 )
         h2  = tf.math.add( h1, h2 )
 
-        h1  = fmix( h1 )
-        h2  = fmix( h2 )
+        h1  = _fmix64( h1 )
+        h2  = _fmix64( h2 )
 
         h1  = tf.math.add( h1, h2 )
         h2  = tf.math.add( h1, h2 )
@@ -249,16 +235,6 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
     def hash128_x86( key, seed ):
         ''' Implements 128bit murmur3 hash for x86. '''
-
-        @tf.function
-        def fmix( h ):
-            tf.debugging.assert_type( h, tf_type=tf.uint32 )
-            h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
-            h = tf.math.multiply( h, 0x85ebca6b )
-            h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 13))
-            h = tf.math.multiply( h, 0xc2b2ae35 )
-            h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
-            return h
 
         length = int(tf.strings.length( key ).numpy())
         nblocks = length // 16
@@ -289,54 +265,38 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
                 k4 = blocks[block_index * 4 + 3]
 
                 k1  = tf.math.multiply( c1, k1 )
-                k1  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( k1, 15 ),
-                      tf.bitwise.right_shift( k1, 17 ))
+                k1 = _rotate_left( k1, 15 )
                 k1 = tf.math.multiply( c2, k1 )
                 h1 = tf.bitwise.bitwise_xor( h1,  k1 )
 
-                h1  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( h1, 19 ),
-                      tf.bitwise.right_shift( h1, 13 ))
+                h1 = _rotate_left( h1, 19 )
                 h1 = tf.math.add( h1, h2 )
                 h1 = tf.math.add( tf.math.multiply( h1, 5 ), 0x561ccd1b )
 
                 k2 = tf.math.multiply( c2, k2 )
-                k2  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( k2, 16 ),
-                      tf.bitwise.right_shift( k2, 16 ))
+                k2 = _rotate_left( k2, 16 )
                 k2 = tf.math.multiply( c3, k2 )
                 h2 = tf.bitwise.bitwise_xor( h2, k2 )
 
-                h2  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( h2, 17 ),
-                      tf.bitwise.right_shift( h2, 15 ))
+                h2 = _rotate_left( h2, 17 )
                 h2 = tf.math.add( h2, h3 )
                 h2 = tf.math.add( tf.math.multiply( h2, 5 ), 0x0bcaa747 )
 
                 k3  = tf.math.multiply( c3, k3 )
-                k3  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( k3, 17 ),
-                      tf.bitwise.right_shift( k3, 15 ))
+                k3 = _rotate_left( k3, 17 )
                 k3 = tf.math.multiply( c4, k3 )
                 h3 = tf.bitwise.bitwise_xor( h3, k3 )
 
-                h3  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( h3, 15 ),
-                      tf.bitwise.right_shift( h3, 17 ))
+                h3 = _rotate_left( h3, 15 )
                 h3 = tf.math.add( h3, h4 )
                 h3 = tf.math.add( tf.math.multiply( h3, 5 ), 0x96cd1c35 )
 
                 k4  = tf.math.multiply( c4, k4 )
-                k4  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( k4, 18 ),
-                      tf.bitwise.right_shift( k4, 14 ))
+                k4 = _rotate_left( k4, 18 )
                 k4 = tf.math.multiply( c1, k4 )
                 h4 = tf.bitwise.bitwise_xor( h4, k4 )
 
-                h4  = tf.bitwise.bitwise_or(
-                      tf.bitwise.left_shift( h4, 13 ),
-                      tf.bitwise.right_shift( h4, 19 ))
+                h4 = _rotate_left( h4, 13 )
                 h4 = tf.math.add( h1, h4 )
                 h4 = tf.math.add( tf.math.multiply( h4, 5 ),  0x32ac3b17 )
 
@@ -362,9 +322,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
         if tail_size > 12:
             k4 = tf.math.multiply( k4, c4 )
-            k4 = tf.bitwise.bitwise_or(
-                 tf.bitwise.left_shift( k4, 18 ),
-                 tf.bitwise.right_shift( k4, 14 ) )
+            k4 = _rotate_left( k4, 18 )
             k4 = tf.math.multiply( k4, c1 )
             h4 = tf.bitwise.bitwise_xor( h4, k4 )
 
@@ -382,9 +340,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
         if tail_size > 8:
             k3 = tf.math.multiply( k3, c3 )
-            k3 = tf.bitwise.bitwise_or(
-                 tf.bitwise.left_shift( k3, 17 ),
-                 tf.bitwise.right_shift( k3, 15 ))
+            k3 = _rotate_left( k3, 17 )
             k3 = tf.math.multiply( k3, c4 )
             h3 = tf.bitwise.bitwise_xor( h3, k3 )
 
@@ -402,9 +358,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
         if tail_size > 4:
             k2 = tf.math.multiply( k2, c2 )
-            k2 = tf.bitwise.bitwise_or(
-                 tf.bitwise.left_shift( k2, 16 ),
-                 tf.bitwise.right_shift( k2, 16 ))
+            k2 = _rotate_left( k2, 16 )
             k2 = tf.math.multiply( k2, c3 )
             h2 = tf.bitwise.bitwise_xor( h2, k2 )
 
@@ -422,9 +376,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
         if tail_size > 0:
             k1 = tf.math.multiply( k1, c1 )
-            k1 = tf.bitwise.bitwise_or(
-                 tf.bitwise.left_shift( k1, 15 ),
-                 tf.bitwise.right_shift( k1, 17 ))
+            k1 = _rotate_left( k1, 15 )
             k1 = tf.math.multiply( k1, c2 )
             h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
@@ -441,10 +393,10 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
         h3 = tf.math.add( h1, h3 )
         h4 = tf.math.add( h1, h4 )
 
-        h1 = fmix( h1 )
-        h2 = fmix( h2 )
-        h3 = fmix( h3 )
-        h4 = fmix( h4 )
+        h1 = _fmix32( h1 )
+        h2 = _fmix32( h2 )
+        h3 = _fmix32( h3 )
+        h4 = _fmix32( h4 )
 
         h1 = tf.math.add( h1, h2 )
         h1 = tf.math.add( h1, h3 )
