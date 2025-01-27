@@ -101,12 +101,7 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
         h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
     #finalization
-    unsigned_val = int(_fmix32( tf.bitwise.bitwise_xor(
-        h1, tf.cast( length, tf.uint32 ) ) ).numpy())
-    if unsigned_val & 0x80000000 == 0:
-        return unsigned_val
-    else:
-        return -( (unsigned_val ^ 0xFFFFFFFF) + 1 )
+    return _fmix32( tf.bitwise.bitwise_xor( h1, tf.cast( length, tf.uint32 ) ) )
 
 
 def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
@@ -469,4 +464,4 @@ if __name__ == "__main__":
     
     for str_to_hash in opts.strings:
         sys.stdout.write( '"%s" = 0x%08X\n' % (
-            str_to_hash, hash( tf.constant( str_to_hash, tf.string ) ) ) )
+            str_to_hash, hash( tf.constant( str_to_hash, tf.string ) ).numpy() ) )

@@ -4,7 +4,6 @@
 
 import os
 import sys
-import unittest
 
 import tensorflow as tf
 
@@ -12,7 +11,7 @@ file_dir = os.path.dirname( __file__ )
 sys.path.append( os.path.join( file_dir, '..' ) )
 import tfmmh3
 
-class Testtfmmh3( unittest.TestCase ):
+class Testtfmmh3( tf.test.TestCase ):
     def _load_solutions(self, solution_file, base = 16):
         solution = {}
         with open( os.path.join( file_dir, solution_file ), 'rb' ) as f:
@@ -82,4 +81,4 @@ class Testtfmmh3( unittest.TestCase ):
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
 if __name__ == "__main__":
-    unittest.main()
+    tf.test.main()
