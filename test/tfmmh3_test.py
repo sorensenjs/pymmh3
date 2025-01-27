@@ -48,7 +48,8 @@ class Testtfmmh3( tf.test.TestCase ):
         with open( os.path.join( file_dir, 'pg1260.txt' ), 'rb' ) as test_file:
             for l in test_file.readlines():
                 s = solution[l]
-                r = tfmmh3.hash128( tf.constant(l) , x64arch = False )
+                h = tfmmh3.hash128( tf.constant(l) , x64arch = False )
+                r = ( int( h.numpy()[ 0 ] ) << 64 ) + int( h.numpy()[ 1 ] )
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
     def test_128bit_x86_custom_seed_string( self ):
@@ -57,8 +58,9 @@ class Testtfmmh3( tf.test.TestCase ):
         with open( os.path.join( file_dir, 'pg1260.txt' ), 'rb' ) as test_file:
             for l in test_file.readlines():
                 s = solution[l]
-                r = tfmmh3.hash128( tf.constant(l), seed = tf.constant( 0x1234ABCD, tf.uint32 ),
+                h = tfmmh3.hash128( tf.constant(l), seed = tf.constant( 0x1234ABCD, tf.uint32 ),
                                     x64arch = False )
+                r = ( int( h.numpy()[ 0 ] ) << 64 ) + int( h.numpy()[ 1 ] )
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
     def test_128bit_x64_basic_string( self ):
@@ -67,7 +69,8 @@ class Testtfmmh3( tf.test.TestCase ):
         with open( os.path.join( file_dir, 'pg1260.txt' ), 'rb' ) as test_file:
             for l in test_file.readlines():
                 s = solution[l]
-                r = tfmmh3.hash128( tf.constant(l), x64arch = True )
+                h = tfmmh3.hash128( tf.constant(l), x64arch = True )
+                r = ( int( h.numpy()[ 0 ] ) << 64 ) + int( h.numpy()[ 1 ] )
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
     def test_128bit_x64_custom_seed_string( self ):
@@ -76,8 +79,9 @@ class Testtfmmh3( tf.test.TestCase ):
         with open( os.path.join( file_dir, 'pg1260.txt' ), 'rb' ) as test_file:
             for l in test_file.readlines():
                 s = solution[l]
-                r = tfmmh3.hash128( tf.constant(l), seed = tf.constant( 0x1234ABCD, tf.uint32 ),
+                h = tfmmh3.hash128( tf.constant(l), seed = tf.constant( 0x1234ABCD, tf.uint32 ),
                                     x64arch = True )
+                r = ( int( h.numpy()[ 0 ] ) << 64 ) + int( h.numpy()[ 1 ] )
                 self.assertEqual( s, r, 'different hash for line: "%s"\n0x%08X != 0x%08X' % ( l, s, r ) )
 
 if __name__ == "__main__":

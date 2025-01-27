@@ -228,7 +228,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
         h1  = tf.math.add( h1, h2 )
         h2  = tf.math.add( h1, h2 )
 
-        return ( int(h2.numpy()) << 64 | int(h1.numpy()) )
+        return tf.stack([ h2, h1 ])
 
     def hash128_x86( key, seed ):
         ''' Implements 128bit murmur3 hash for x86. '''
@@ -402,10 +402,13 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
         h3 = tf.math.add( h1, h3 )
         h4 = tf.math.add( h1, h4 )
 
-        return ( int( h4.numpy() ) << 96 |
-                 int( h3.numpy() ) << 64 |
-                 int( h2.numpy() ) << 32 |
-                 int( h1.numpy() ) )
+        return tf.stack([
+            tf.bitwise.bitwise_or(
+                tf.bitwise.left_shift( tf.cast( h4, tf.uint64), 32 ),
+                tf.cast( h3, tf.uint64 ) ),
+            tf.bitwise.bitwise_or(
+                tf.bitwise.left_shift( tf.cast( h2, tf.uint64), 32 ),
+                tf.cast( h1, tf.uint64 ) )])
 
     if x64arch:
         return hash128_x64( key, seed )
