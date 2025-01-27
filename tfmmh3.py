@@ -49,6 +49,7 @@ def _fmix64( k ):
 def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
     ''' Implements 32bit murmur3 hash. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
+    tf.debugging.assert_type( seed, tf_type=tf.uint32 )
 
     length = tf.strings.length( key )
     nblocks = tf.bitwise.right_shift( length, 2 )
@@ -83,7 +84,7 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
     tail_size = length & 3
     tail_bytes = tf.cast(
         tf.io.decode_raw(tf.strings.substr( key, tail_index, tail_size ),
-                         tf.uint8, little_endian=True).numpy(), tf.uint32 )
+                         tf.uint8, little_endian=True), tf.uint32 )
     if tail_size >= 3:
         k1 = tf.bitwise.bitwise_xor(
             k1, tf.bitwise.left_shift( tail_bytes[ 2 ], 16 ) )
@@ -110,10 +111,11 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
 
 def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     ''' Implements 128bit murmur3 hash. '''
+    tf.debugging.assert_type( key, tf_type=tf.string )
+    tf.debugging.assert_type( seed, tf_type=tf.uint32 )
 
     def hash128_x64( key, seed ):
         ''' Implements 128bit murmur3 hash for x64. '''
-        tf.debugging.assert_type( key, tf_type=tf.string )
 
         length = tf.strings.length( key )
         nblocks = tf.bitwise.right_shift( length, 4 )
@@ -236,9 +238,8 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     def hash128_x86( key, seed ):
         ''' Implements 128bit murmur3 hash for x86. '''
 
-        length = int(tf.strings.length( key ).numpy())
-        nblocks = length // 16
-        tf.debugging.assert_type( key, tf_type=tf.string )
+        length = tf.strings.length( key )
+        nblocks = tf.bitwise.right_shift( length, 4 )
 
         h1 = seed
         h2 = seed
@@ -255,14 +256,14 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
             blocks = tf.cast(
                 tf.io.decode_raw(
                     key, tf.int32, little_endian=True, fixed_length=nblocks * 16),
-                tf.uint32).numpy()
-            for block_start in range( 0, nblocks * 16, 16 ):
-                block_index = block_start // 16
+                tf.uint32)
+            for block_start in tf.range( 0, nblocks * 16, 16 ):
+                block_index = tf.bitwise.right_shift( block_start, 2 )
 
-                k1 = blocks[block_index * 4]
-                k2 = blocks[block_index * 4 + 1]
-                k3 = blocks[block_index * 4 + 2]
-                k4 = blocks[block_index * 4 + 3]
+                k1 = blocks[ block_index ]
+                k2 = blocks[ block_index + 1 ]
+                k3 = blocks[ block_index + 2 ]
+                k4 = blocks[ block_index + 3 ]
 
                 k1  = tf.math.multiply( c1, k1 )
                 k1 = _rotate_left( k1, 15 )
@@ -309,7 +310,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
         tail_size = length & 15
         tail_bytes = tf.cast(
             tf.io.decode_raw( tf.strings.substr( key, tail_index, tail_size ),
-                              tf.uint8, little_endian=True ).numpy(), tf.uint32 )
+                              tf.uint8, little_endian=True ), tf.uint32 )
 
         if tail_size >= 15:
             k4 = tf.bitwise.bitwise_xor(
@@ -381,6 +382,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
             h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
         #finalization
+        length = tf.cast( length, tf.uint32 )
         h1 = tf.bitwise.bitwise_xor( h1, length )
         h2 = tf.bitwise.bitwise_xor( h2, length )
         h3 = tf.bitwise.bitwise_xor( h3, length )
@@ -419,6 +421,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 def hash64( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     ''' Implements 64bit murmur3 hash. Returns a tuple. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
+    tf.debugging.assert_type( seed, tf_type=tf.uint32 )
 
     hash_128 = hash128( key, seed, x64arch )
 
@@ -440,6 +443,7 @@ def hash64( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 def hash_bytes( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
     ''' Implements 128bit murmur3 hash. Returns a byte string. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
+    tf.debugging.assert_type( seed, tf_type=tf.uint32 )
 
     hash_128 = hash128( key, seed, x64arch )
 
@@ -464,4 +468,5 @@ if __name__ == "__main__":
     opts = parser.parse_args()
     
     for str_to_hash in opts.strings:
-        sys.stdout.write( '"%s" = 0x%08X\n' % ( tf.constant(str_to_hash), hash( str_to_hash ) ) )
+        sys.stdout.write( '"%s" = 0x%08X\n' % (
+            str_to_hash, hash( tf.constant( str_to_hash, tf.string ) ) ) )
