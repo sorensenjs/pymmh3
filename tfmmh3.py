@@ -13,6 +13,17 @@ https://pypi.python.org/pypi/mmh3/2.3.1
 
 import tensorflow as tf
 
+
+@tf.function
+def _rotate_left( x, n ):
+    ''' Implements a ROTL operation according to input size. '''
+    tf.debugging.assert_less( n, x.dtype.size * 8 )
+    return tf.bitwise.bitwise_or(
+        tf.bitwise.left_shift( x, n ),
+        tf.bitwise.right_shift( x, x.dtype.size * 8 - n)
+    )
+
+
 def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
     ''' Implements 32bit murmur3 hash. '''
     tf.debugging.assert_type( key, tf_type=tf.string )
@@ -27,8 +38,8 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
         h = tf.bitwise.bitwise_xor(h, tf.bitwise.right_shift(h, 16))
         return h
 
-    length = int(tf.strings.length( key ).numpy())
-    nblocks = length // 4
+    length = tf.strings.length( key )
+    nblocks = tf.bitwise.right_shift( length, 2 )
 
     h1 = seed
 
@@ -40,9 +51,10 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
         blocks = tf.cast(
             tf.io.decode_raw(
                 key, tf.int32, little_endian=True, fixed_length=nblocks * 4),
-            tf.uint32 ).numpy()
+            tf.uint32 )
 
-        for block in blocks:
+        for i in tf.range( nblocks ):
+            block = blocks[ i ]
             k1 = tf.constant( block, tf.uint32 )
 
             k1 = tf.math.multiply( c1, k1 )
@@ -79,7 +91,8 @@ def hash( key, seed = tf.constant( 0, tf.uint32 ) ):
         h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
     #finalization
-    unsigned_val = int(fmix( tf.bitwise.bitwise_xor( h1, length ) ).numpy())
+    unsigned_val = int(fmix( tf.bitwise.bitwise_xor(
+        h1, tf.cast( length, tf.uint32 ) ) ).numpy())
     if unsigned_val & 0x80000000 == 0:
         return unsigned_val
     else:
@@ -91,6 +104,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
     def hash128_x64( key, seed ):
         ''' Implements 128bit murmur3 hash for x64. '''
+        tf.debugging.assert_type( key, tf_type=tf.string )
 
         @tf.function
         def fmix( k ):
@@ -102,10 +116,8 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
             k = tf.bitwise.bitwise_xor( k, tf.bitwise.right_shift( k, 33 ))
             return k
 
-        length = int(tf.strings.length( key).numpy())
-        nblocks = length // 16
-
-        tf.debugging.assert_type( key, tf_type=tf.string )
+        length = tf.strings.length( key )
+        nblocks = tf.bitwise.right_shift( length, 4 )
 
         h1 = tf.cast( seed, tf.uint64 )
         h2 = h1
@@ -118,10 +130,10 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
             blocks = tf.cast(
                 tf.io.decode_raw(
                     key, tf.int64, little_endian=True, fixed_length=nblocks * 16),
-                    tf.uint64 ).numpy()
-            for block_start in range( 0, nblocks * 2, 2 ):
-                k1 = blocks[block_start]
-                k2 = blocks[1 + block_start]
+                    tf.uint64 )
+            for block_start in tf.range( 0, nblocks * 2, 2 ):
+                k1 = blocks[ block_start ]
+                k2 = blocks[ 1 + block_start ]
 
                 k1  = tf.math.multiply( c1, k1 )
                 k1  = tf.bitwise.bitwise_or(
@@ -157,7 +169,7 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
         tail_size = length & 15
         tail_bytes = tf.cast(
             tf.io.decode_raw( tf.strings.substr( key, tail_index, tail_size ),
-                              tf.uint8, little_endian=True ).numpy(), tf.uint64 )
+                              tf.uint8, little_endian=True ), tf.uint64 )
 
         if tail_size >= 15:
             k2 = tf.bitwise.bitwise_xor(
@@ -221,8 +233,8 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
             h1 = tf.bitwise.bitwise_xor( h1, k1 )
 
         #finalization
-        h1 = tf.bitwise.bitwise_xor( h1, length )
-        h2 = tf.bitwise.bitwise_xor( h2, length )
+        h1 = tf.bitwise.bitwise_xor( h1, tf.cast( length, tf.uint64 ) )
+        h2 = tf.bitwise.bitwise_xor( h2, tf.cast( length, tf.uint64 ) )
 
         h1  = tf.math.add( h1, h2 )
         h2  = tf.math.add( h1, h2 )
