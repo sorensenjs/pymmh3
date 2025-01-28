@@ -429,25 +429,8 @@ def hash128( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
 
 def hash64( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
-    ''' Implements 64bit murmur3 hash. Returns a tuple. '''
-    tf.debugging.assert_type( key, tf_type=tf.string )
-    tf.debugging.assert_type( seed, tf_type=tf.uint32 )
-
-    hash_128 = hash128( key, seed, x64arch )
-
-    unsigned_val1 = hash_128 & 0xFFFFFFFFFFFFFFFF
-    if unsigned_val1 & 0x8000000000000000 == 0:
-        signed_val1 = unsigned_val1
-    else:
-        signed_val1 = -( (unsigned_val1 ^ 0xFFFFFFFFFFFFFFFF) + 1 )
-
-    unsigned_val2 = ( hash_128 >> 64 ) & 0xFFFFFFFFFFFFFFFF
-    if unsigned_val2 & 0x8000000000000000 == 0:
-        signed_val2 = unsigned_val2
-    else:
-        signed_val2 = -( (unsigned_val2 ^ 0xFFFFFFFFFFFFFFFF) + 1 )
-
-    return ( int( signed_val1 ), int( signed_val2 ) )
+    ''' Implements 64bit murmur3 hash. Returns a tensor of two  values. '''
+    return hash128( key, seed, x64arch )
 
 
 def hash_bytes( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
@@ -457,14 +440,14 @@ def hash_bytes( key, seed = tf.constant( 0, tf.uint32 ), x64arch = True ):
 
     hash_128 = hash128( key, seed, x64arch )
 
-    bytestring = ''
-
-    for i in range(0, 16, 1):
-        lsbyte = hash_128 & 0xFF
-        bytestring = bytestring + str( chr( lsbyte ) )
-        hash_128 = hash_128 >> 8
-
-    return bytestring
+    character_lookup = tf.constant([bytes([i]) for i in range(256)])
+    as_string_1 = tf.strings.reduce_join(
+        tf.gather(character_lookup,
+                  tf.cast(tf.bitcast(hash_128[0], tf.uint8), tf.int32)))
+    as_string_2 = tf.strings.reduce_join(
+        tf.gather(character_lookup,
+                  tf.cast(tf.bitcast(hash_128[1], tf.uint8), tf.int32)))
+    return as_string_1 + as_string_2
 
 
 if __name__ == "__main__":
